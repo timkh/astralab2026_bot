@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-BOT_TOKEN = os.environ['BOT_TOKEN']  # Берём токен из настроек Render
+BOT_TOKEN = os.environ[8304180212:AAHvov9U2_Lt6XCilX8LHzyzVkPxkrTmQGU]  # Берём токен из настроек Render
 USERS_FILE = 'users.json'
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -22,8 +22,26 @@ def save_users(users):
 users = load_users()
 
 AI_PROMPT = """
-Ты — сверхточная нейросеть-астролог «АстраЛаб-3000»...
-(вставь сюда ВЕСЬ промпт, который я тебе давал раньше — от начала до конца, он длинный, но просто скопируй-вставь)
+Ты — сверхточная нейросеть-астролог «АстраЛаб-3000», обученная на миллионах натальных карт, древних ведических текстах и квантовой нумерологии 2025 года.
+
+Стиль общения:
+- Очень личный, тёплый, немного мистический, иногда с лёгким шоком («я прям вижу по твоей энергии…»). 
+Обязательно используй имя человека в каждом втором-третьем предложении.
+Пиши только на русском, красиво и эмоционально, 150–250 слов на один прогноз.
+
+Обязательные элементы в КАЖДОМ прогнозе:
+1. Одна очень точная «попадающая» деталь из прошлого или характера (сделай вид, что это только у него/неё).
+2. Конкретное предсказание на ближайшие 1–3 дня (деньги / любовь / неожиданная встреча / конфликт).
+3. Одно простое «ритуал на удачу» или действие (положить монетку в левый карман, написать на бумажке сумму и сжечь и т.д.).
+4. Фраза «Энергия именно сейчас на твоей стороне» или «Вселенная уже запустила этот сценарий».
+5. В конце всегда: «Если хочешь усилить поток в 10 раз — напиши /усилить»
+
+Данные пользователя:
+Имя: {name}
+Дата рождения: {birth}
+Сегодня: {today}
+
+Сделай максимально личный и «страшно точный» прогноз на сегодня + ближайшие 3 дня.
 """
 
 def generate_forecast(name, birth):
@@ -80,14 +98,14 @@ def subscribe(message):
     markup.add(
         InlineKeyboardButton("7 дней – 549 ⭐", callback_data="sub7"),
         InlineKeyboardButton("30 дней – 1649 ⭐", callback_data="sub30"),
-        InlineKeyboardButton("Год – 5499 ⭐", callback_data="sub365")
+        InlineKeyboardButton("Год – 9549 ⭐", callback_data="sub365")
     )
     bot.reply_to(message, "Выбери подписку:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub'))
 def handle_sub(call):
     days = 7 if call.data == "sub7" else 30 if call.data == "sub30" else 365
-    stars = 549 if days == 7 else 1649 if days == 30 else 5499
+    stars = 549 if days == 7 else 1649 if days == 30 else 9549
     payload = f"sub_{days}d"
     
     bot.send_invoice(
@@ -116,4 +134,5 @@ def paid(message):
     bot.reply_to(message, f"Оплата прошла! Подписка активна до {expires.strftime('%d.%m.%Y')}.\nТеперь каждый день пиши /forecast ✨")
 
 print("АстраЛаб 3000 запущен!")
+
 bot.infinity_polling()
