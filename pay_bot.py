@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-BOT_TOKEN = os.environ[8304180212:AAHvov9U2_Lt6XCilX8LHzyzVkPxkrTmQGU]  # Берём токен из настроек Render
+BOT_TOKEN = os.environ['8304180212:AAHvov9U2_Lt6XCilX8LHzyzVkPxkrTmQGU']  # Берём токен из настроек Render
 USERS_FILE = 'users.json'
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -136,3 +136,4 @@ def paid(message):
 print("АстраЛаб 3000 запущен!")
 
 bot.infinity_polling()
+
