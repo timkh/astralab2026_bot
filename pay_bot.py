@@ -83,7 +83,7 @@ AI_PROMPT = """
 def generate_forecast(name, birth):
     today = datetime.now().strftime("%d %B %Y")
     zodiac = get_zodiac_sign(birth)
-    full_prompt = _PROMPT.format(name=name, zodiac=zodiac, birth=birth, today=today)
+    full_prompt = AI_PROMPT.format(name=name, zodiac=zodiac, birth=birth, today=today)
 
     if GROQ_API_KEY:
         try:
@@ -216,3 +216,4 @@ if __name__ == '__main__':
     time.sleep(3)
     print("АстраЛаб 3000 запущен и готов к миллиону!")
     bot.infinity_polling(none_stop=True)
+
