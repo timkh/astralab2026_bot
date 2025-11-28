@@ -20,7 +20,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 # BOT_TOKEN из переменных Render
-BOT_TOKEN = os.environ['8304180212:AAHvov9U2_Lt6XCilX8LHzyzVkPxkrTmQGU']
+BOT_TOKEN = os.environ['BOT_TOKEN']
 USERS_FILE = 'users.json'
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -156,3 +156,4 @@ if __name__ == '__main__':
     time.sleep(5)  # Ждём, пока Flask стартанёт
     print("АстраЛаб 3000 запущен!")
     bot.infinity_polling()
+
