@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 @app.route('/health')
 def health():
-    return "АстраЛаб 3000 работает → @Astralab2026_bot", 200
+    return "АстраЛаб 3000 → @Astralab2026_bot", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -116,25 +116,14 @@ def generate_forecast(name, birth):
 # ====================== Команды бота ======================
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "Привет! Я — АстраЛаб 3000\n\nНапиши в двух строках:\nИмя\nДД.ММ.ГГГГ")
+    bot.reply_to(m, "Привет! Я — АстраЛаб 3000\n\nНапиши:\nИмя\nДД.ММ.ГГГГ")
 
-# ←←←← ЭТОТ БЛОК ДОЛЖЕН БЫТЬ ВЫШЕ ВСЕХ ДРУГИХ text-обработчиков!
-@bot.message_handler(content_types=['text'])
-def handle_text(m):
-    if m.text.startswith('/'): 
-        return  # ← пропускаем команды, их ловят другие хендлеры
-    lines = [x.strip() for x in m.text.split('\n') if x.strip()]
-    if len(lines) < 2:
-        return bot.reply_to(m, "Имя и дата рождения — в двух строках")
-    name, birth = lines[0].capitalize(), lines[1]
-    uid = str(m.from_user.id)
-    users.setdefault(uid, {"name": name, "birth": birth, "paid": False})
-    save_users(users)
-    bot.reply_to(m, generate_forecast(name, birth) + "\n\nЕжедневные прогнозы — /subscribe")
-
-# ←←←← Теперь команды точно будут работать
 @bot.message_handler(commands=['forecast'])
-def forecast(m): ...
+def forecast(m):
+    uid = str(m.from_user.id)
+    if not users.get(uid, {}).get("paid", False):
+        return bot.reply_to(m, "Подписка нужна → /subscribe")
+    bot.reply_to(m, generate_forecast(users[uid]["name"], users[uid]["birth"]))
 
 @bot.message_handler(commands=['subscribe'])
 def subscribe(m):
@@ -145,6 +134,19 @@ def subscribe(m):
         InlineKeyboardButton("Год — 5499", callback_data="sub365")
     )
     bot.reply_to(m, "Выбери подписку и открой поток удачи:", reply_markup=kb)
+    
+@bot.message_handler(content_types=['text'])
+def any_text(m):
+    if m.text.startswith('/'):
+        return  # команды уже обработаны выше
+    lines = [x.strip() for x in m.text.split('\n') if x.strip()]
+    if len(lines) < 2:
+        return bot.reply_to(m, "Имя и дата — в двух строках")
+    name, birth = lines[0].capitalize(), lines[1]
+    uid = str(m.from_user.id)
+    users.setdefault(uid, {"name": name, "birth": birth, "paid": False})
+    save_users(users)
+    bot.reply_to(m, generate_forecast(name, birth) + "\n\nЕжедневно — /subscribe")
 
 @bot.callback_query_handler(func=lambda c: c.data in ["sub7","sub30","sub365"])
 def invoice(c):
@@ -194,12 +196,8 @@ atexit.register(lambda: scheduler.shutdown())
 
 # ====================== Запуск (Web Service + polling) ======================
 if __name__ == '__main__':
-    # Запускаем Flask в фоне — Render видит порт
     threading.Thread(target=run_flask, daemon=True).start()
     time.sleep(3)
-    
-    
-    print("АстраЛаб 3000 запущен — порт открыт, 409 убит, всё работает!")
+        
+    print("АстраЛаб 3000 запущен — всё будет работать!")
     bot.infinity_polling(none_stop=True, interval=0)
-
-
