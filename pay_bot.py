@@ -1,5 +1,5 @@
 import telebot
-from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton, Update
 import json
 import os
 from datetime import datetime, timedelta
@@ -229,8 +229,7 @@ def set_webhook():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
+        update = Update.de_json(request.get_data().decode('utf-8'))
         bot.process_new_updates([update])
         return 'OK', 200
     return abort(403)
@@ -243,3 +242,4 @@ if __name__ == '__main__':
     print("АстраЛаб 3000 на вебхуках — команды работают мгновенно!")
     while True:
         time.sleep(100)
+
