@@ -158,7 +158,9 @@ def invoice(callback):
         start_parameter="astralab2026"
     )
 
-@bot.pre_checkout_query_handler(lambda q: True)(lambda q: bot.answer_pre_checkout_query(q.id, ok=True))
+@bot.pre_checkout_query_handler(func=lambda query: True)
+def precheckout(query):
+    bot.answer_pre_checkout_query(query.id, ok=True)
 
 @bot.message_handler(content_types=['successful_payment'])
 def paid(message):
@@ -178,3 +180,4 @@ if __name__ == '__main__':
     time.sleep(3)
     print("АстраЛаб 3000 онлайн и готов зарабатывать!")
     bot.infinity_polling(none_stop=True)
+
