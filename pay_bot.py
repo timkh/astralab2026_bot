@@ -183,7 +183,7 @@ def invoice(c):
         title=f"АстраЛаб — {days} дней",
         description="Ежедневные ИИ-прогнозы",
         payload=f"sub_{days}d",
-        provider_token=PROVIDER_TOKEN,
+        provider_token='',
         currency="XTR",
         prices=[LabeledPrice(f"{days} дней", price * 1000)],  # Stars ×1000
         start_parameter="astralab2026"
@@ -250,3 +250,4 @@ if __name__ == "__main__":
     time.sleep(2)
     print("АстраЛаб 3000 запущен")
     bot.infinity_polling(none_stop=True)
+
