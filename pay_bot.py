@@ -3,19 +3,27 @@ from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButt
 import json
 import os
 from datetime import datetime, timedelta
-from flask import Flask, request, abort
+from flask import Flask
 import threading
 import time
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
+from pytz import timezone
 import atexit
+import locale
+
+# ====================== Локаль для русского языка ======================
+try:
+    locale.setlocale(locale.LC_TIME, "ru_RU.UTF-8")
+except:
+    pass
 
 # ====================== Flask ======================
 app = Flask(__name__)
 
 @app.route('/health')
 def health():
-    return "АстраЛаб 3000 → @Astralab2026_bot", 200
+    return "АстраЛаб 3000 — OK", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -24,14 +32,20 @@ def run_flask():
 # ====================== Конфиг ======================
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-bot = telebot.TeleBot(BOT_TOKEN)
+PROVIDER_TOKEN = os.environ.get("PROVIDER_TOKEN", "")  # Stars provider token
+
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
+
 USERS_FILE = "users.json"
 
 # ====================== База пользователей ======================
 def load_users():
     if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(USERS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
 def save_users(data):
@@ -40,27 +54,27 @@ def save_users(data):
 
 users = load_users()
 
-# ====================== ЗНАК ЗОДИАКА ======================
+# ====================== Определение знака ======================
 def get_zodiac_sign(birth_date: str) -> str:
     try:
         d, m = map(int, birth_date.strip().split('.')[:2])
         if (m == 3 and d >= 21) or (m == 4 and d <= 19): return "Овен"
-        elif (m == 4 and d >= 20) or (m == 5 and d <= 20): return "Телец"
-        elif (m == 5 and d >= 21) or (m == 6 and d <= 20): return "Близнецы"
-        elif (m == 6 and d >= 21) or (m == 7 and d <= 22): return "Рак"
-        elif (m == 7 and d >= 23) or (m == 8 and d <= 22): return "Лев"
-        elif (m == 8 and d >= 23) or (m == 9 and d <= 22): return "Дева"
-        elif (m == 9 and d >= 23) or (m == 10 and d <= 22): return "Весы"
-        elif (m == 10 and d >= 23) or (m == 11 and d <= 21): return "Скорпион"
-        elif (m == 11 and d >= 22) or (m == 12 and d <= 21): return "Стрелец"
-        elif (m == 12 and d >= 22) or (m == 1 and d <= 19): return "Козерог"
-        elif (m == 1 and d >= 20) or (m == 2 and d <= 18): return "Водолей"
-        elif (m == 2 and d >= 19) or (m == 3 and d <= 20): return "Рыбы"
+        if (m == 4 and d >= 20) or (m == 5 and d <= 20): return "Телец"
+        if (m == 5 and d >= 21) or (m == 6 and d <= 20): return "Близнецы"
+        if (m == 6 and d >= 21) or (m == 7 and d <= 22): return "Рак"
+        if (m == 7 and d >= 23) or (m == 8 and d <= 22): return "Лев"
+        if (m == 8 and d >= 23) or (m == 9 and d <= 22): return "Дева"
+        if (m == 9 and d >= 23) or (m == 10 and d <= 22): return "Весы"
+        if (m == 10 and d >= 23) or (m == 11 and d <= 21): return "Скорпион"
+        if (m == 11 and d >= 22) or (m == 12 and d <= 21): return "Стрелец"
+        if (m == 12 and d >= 22) or (m == 1 and d <= 19): return "Козерог"
+        if (m == 1 and d >= 20) or (m == 2 and d <= 18): return "Водолей"
+        if (m == 2 and d >= 19) or (m == 3 and d <= 20): return "Рыбы"
     except:
         pass
     return "неизвестен"
 
-# ====================== Самый убойный промпт 2025 ======================
+# ====================== Промпт ======================
 AI_PROMPT = """
 Ты — сверхточная нейросеть-астролог «АстраЛаб-3000», работающая на квантовой нумерологии и транзитах 2025–2026 годов.
 
@@ -70,17 +84,16 @@ AI_PROMPT = """
 Сегодня: {today}
 
 Строго соблюдай:
-- 4–6 раз обратись по имени, 3–5 раз упомяни знак зодиака
-- Стиль тёплый, личный, с лёгким шоком («{name}», «как настоящий {zodiac}, ты…»)
-- Одна «страшно точная» деталь из прошлого именно для этого знака {zodiac}а
-- Конкретное событие на ближайшие 1–3 дня (точные даты + сфера + сумма или инициалы)
-- Простой мощный ритуал под знак
-- Фраза «Вселенная уже запустила этот сценарий» или «Энергия бьёт через край»
-- В конце всегда: «Хочешь усилить поток — напиши /усилить»
-
-Только русский, 200–320 слов, живой текст без списков.
+- 4–6 обращений по имени
+- 3–5 упоминаний знака
+- Одна деталь из прошлого
+- Прогноз с датами на 1–3 дня
+- Ритуал под знак
+- Фраза: «Вселенная уже запустила этот сценарий»
+- 200–320 слов, без списков
 """
 
+# ====================== Генерация прогноза ======================
 def generate_forecast(name, birth):
     today = datetime.now().strftime("%d %B %Y")
     zodiac = get_zodiac_sign(birth)
@@ -102,28 +115,28 @@ def generate_forecast(name, birth):
             if r.status_code == 200:
                 return r.json()["choices"][0]["message"]["content"].strip()
         except Exception as e:
-            print("Groq error: {e}")
+            print(f"Groq error: {e}")
 
-    # Фолбэк
-    return f"""{name}, {zodiac}, я ахнула от твоей карты сегодня…
-Как настоящий {zodiac} ты в 2024-м пережила серьёзный поворот — это до сих пор даёт тебе силу.
-С 29 ноября по 1 декабря у {zodiac}ов мощный денежный канал — поступление 80–350 тысяч.
-30-го жди важный контакт (буквы «А», «С» или «Д»).
-Ритуал: монета + красная нить под подушкой на ночь.
-Вселенная уже запустила сценарий, {name}.
-Хочешь усилить — /усилить"""
+    return f"{name}, как настоящий {zodiac}, ты входишь в мощный поток энергии..."
 
-# ====================== Команды бота ======================
+
+# ====================== Команды ======================
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "Привет! Я — АстраЛаб 3000\n\nНапиши:\nИмя\nДД.ММ.ГГГГ")
+    bot.reply_to(m, "Привет! Отправь две строки:\nИмя\nДД.ММ.ГГГГ")
 
 @bot.message_handler(commands=['forecast'])
-def forecast(m):
+def cmd_forecast(m):
     uid = str(m.from_user.id)
-    if not users.get(uid, {}).get("paid", False):
+    u = users.get(uid)
+
+    if not u:
+        return bot.reply_to(m, "Сначала отправь имя и дату рождения.")
+
+    if not u.get("paid"):
         return bot.reply_to(m, "Подписка нужна → /subscribe")
-    bot.reply_to(m, generate_forecast(users[uid]["name"], users[uid]["birth"]))
+
+    bot.reply_to(m, generate_forecast(u["name"], u["birth"]))
 
 @bot.message_handler(commands=['subscribe'])
 def subscribe(m):
@@ -133,71 +146,107 @@ def subscribe(m):
         InlineKeyboardButton("30 дней — 1649", callback_data="sub30"),
         InlineKeyboardButton("Год — 5499", callback_data="sub365")
     )
-    bot.reply_to(m, "Выбери подписку и открой поток удачи:", reply_markup=kb)
-    
+    bot.reply_to(m, "Выбери подписку:", reply_markup=kb)
+
+# ====================== Обработка имени и даты ======================
 @bot.message_handler(content_types=['text'])
-def any_text(m):
-    if m.text.startswith('/'):
-        return  # команды уже обработаны выше
+def text_input(m):
+    if m.text.startswith('/'): 
+        return
+
     lines = [x.strip() for x in m.text.split('\n') if x.strip()]
     if len(lines) < 2:
-        return bot.reply_to(m, "Имя и дата — в двух строках")
-    name, birth = lines[0].capitalize(), lines[1]
-    uid = str(m.from_user.id)
-    users.setdefault(uid, {"name": name, "birth": birth, "paid": False})
-    save_users(users)
-    bot.reply_to(m, generate_forecast(name, birth) + "\n\nЕжедневно — /subscribe")
+        return bot.reply_to(m, "Пиши имя и дату рождения в двух строках.")
 
+    name = lines[0].capitalize()
+    birth = lines[1]
+    uid = str(m.from_user.id)
+
+    users.setdefault(uid, {})
+    users[uid].update({"name": name, "birth": birth})
+    save_users(users)
+
+    bot.reply_to(m, generate_forecast(name, birth) + "\n\nЧтобы получать ежедневно → /subscribe")
+
+# ====================== Инвойсы ======================
 @bot.callback_query_handler(func=lambda c: c.data in ["sub7","sub30","sub365"])
 def invoice(c):
-    days = 7 if c.data=="sub7" else 30 if c.data=="sub30" else 365
-    stars = 549 if days==7 else 1649 if days==30 else 5499
+    if c.data == "sub7":
+        days, price = 7, 549
+    elif c.data == "sub30":
+        days, price = 30, 1649
+    else:
+        days, price = 365, 5499
+
     bot.send_invoice(
-        c.message.chat.id,
+        chat_id=c.message.chat.id,
         title=f"АстраЛаб — {days} дней",
-        description="Ежедневные ИИ-прогнозы + ритуалы",
+        description="Ежедневные ИИ-прогнозы",
         payload=f"sub_{days}d",
-        provider_token="",
+        provider_token=PROVIDER_TOKEN,
         currency="XTR",
-        prices=[LabeledPrice(f"{days} дней", stars)],
+        prices=[LabeledPrice(f"{days} дней", price * 1000)],  # Stars ×1000
         start_parameter="astralab2026"
     )
     bot.answer_callback_query(c.id)
 
+# ====================== Пре-чекаут ======================
 @bot.pre_checkout_query_handler(func=lambda q: True)
-def pre(q):
+def pre_checkout(q):
     bot.answer_pre_checkout_query(q.id, ok=True)
 
+# ====================== Успешная оплата ======================
 @bot.message_handler(content_types=['successful_payment'])
-def paid(m):
+def success(m):
     uid = str(m.from_user.id)
-    days = 7 if "7d" in m.successful_payment.invoice_payload else 30 if "30d" in m.successful_payment.invoice_payload else 365
-    expires = datetime.now() + timedelta(days=days)
-    if "first_payment_date" not in users[uid]:
-        users[uid]["first_payment_date"] = datetime.now().isoformat()
-    users[uid].update({"paid": True, "expires": expires.isoformat(), "days_paid": days})
-    save_users(users)
-    bot.reply_to(m, f"Оплата прошла! Подписка до {expires.strftime('%d.%m.%Y')}.\nПервые 5 дней — прогноз в 8:00 автоматически!")
+    payload = m.successful_payment.invoice_payload
+    days = int(payload.split('_')[1].replace('d', ''))
 
-# ====================== Авторассылка первые 5 дней ======================
-scheduler = BackgroundScheduler(timezone="Europe/Moscow")
+    expires = datetime.now() + timedelta(days=days)
+
+    users.setdefault(uid, {})
+    users[uid]["paid"] = True
+    users[uid]["expires"] = expires.isoformat()
+    users[uid]["first_payment_date"] = datetime.now().isoformat()
+    save_users(users)
+
+    bot.reply_to(m, f"Оплата прошла! Подписка активна до {expires.strftime('%d.%m.%Y')}.")
+
+# ====================== Авторассылка ======================
+scheduler = BackgroundScheduler(timezone=timezone("Europe/Moscow"))
 scheduler.start()
 
-def daily_forecasts():
+def daily_job():
     now = datetime.now().date()
-    for uid, d in users.items():
-        if d.get("paid") and "first_payment_date" in d:
-            days_passed = (now - datetime.fromisoformat(d["first_payment_date"]).date()).days
-            if 0 <= days_passed <= 4:
-                bot.send_message(int(uid), f"Доброе утро, {d['name']}!\n\n{generate_forecast(d['name'], d['birth'])}")
 
-scheduler.add_job(daily_forecasts, 'cron', hour=8, minute=0, replace_existing=True)
+    for uid, u in users.items():
+        if not u.get("paid"):
+            continue
+        if "first_payment_date" not in u:
+            continue
+        if "expires" not in u:
+            continue
+
+        if datetime.fromisoformat(u["expires"]).date() < now:
+            continue
+
+        days_passed = (now - datetime.fromisoformat(u["first_payment_date"]).date()).days
+        if 0 <= days_passed <= 4:
+            try:
+                bot.send_message(
+                    int(uid),
+                    f"Доброе утро, {u['name']}!\n\n" +
+                    generate_forecast(u["name"], u["birth"])
+                )
+            except:
+                pass
+
+scheduler.add_job(daily_job, "cron", hour=8, minute=0)
 atexit.register(lambda: scheduler.shutdown())
 
-# ====================== Запуск (Web Service + polling) ======================
-if __name__ == '__main__':
+# ====================== Запуск ======================
+if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    time.sleep(3)
-        
-    print("АстраЛаб 3000 запущен — всё будет работать!")
-    bot.infinity_polling(none_stop=True, interval=0)
+    time.sleep(2)
+    print("АстраЛаб 3000 запущен")
+    bot.infinity_polling(none_stop=True)
