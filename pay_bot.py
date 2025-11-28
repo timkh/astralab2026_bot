@@ -56,7 +56,7 @@ AI_PROMPT = """
 4. Дай конкретное предсказание на ближайшие 1–3 дня: точные даты + сфера (деньги / любовь / важная встреча / конфликт) + примерную сумму или инициалы человека.
 5. Дай простой, но «мощный» ритуал, подходящий именно этому знаку зодиака.
 6. Обязательно используй фразу «Вселенная уже запустила этот сценарий» или «Энергия именно сейчас бьёт через край».
-7. В конце всегда: «Хочешь усилить денежный и любовный поток в 10 раз — напиши /усилить»
+# 7. В конце всегда: «Хочешь усилить денежный и любовный поток в 10 раз — напиши /усилить»
 
 Пиши только на русском, красиво и эмоционально, 200–320 слов. Никаких списков, только живой текст.
 Сделай максимально личный, пугающе точный и цепляющий прогноз на сегодня и ближайшие 3 дня.
@@ -225,13 +225,72 @@ def precheckout(query):
 @bot.message_handler(content_types=['successful_payment'])
 def paid(message):
     user_id = str(message.from_user.id)
-    days = 7 if "7d" in message.successful_payment.invoice_payload else 30 if "30d" in message.successful_payment.invoice_payload else 365
+    payload = message.successful_payment.invoice_payload
+    if "7d" in payload:
+        days = 7
+    elif "30d" in payload:
+        days = 30
+    else:
+        days = 365
+        
     expires = datetime.now() + timedelta(days=days)
+    
+    # ←←←← НОВАЯ СТРОЧКА — запоминаем дату первой оплаты
+    if not users[user_id].get("first_payment_date"):
+        users[user_id]["first_payment_date"] = datetime.now().isoformat()
+    users[user_id]["days_paid"] = days
+    
     users[user_id]["paid"] = True
     users[user_id]["expires"] = expires.isoformat()
     save_users(users)
-    bot.reply_to(message, f"Оплата прошла! Подписка активна до {expires.strftime('%d.%m.%Y')}.\n"
-                        "Теперь каждый день пиши /forecast — я буду рядом 24/7")
+    
+    bot.reply_to(message, f"Оплата прошла! Подписка активна до {expires.strftime('%d.%m.%Y')}.\n\n"
+                        "Теперь каждый день в 8:00 ты будешь получать свежий прогноз автоматически\n"
+#                        "Дальше — только по активной подписке.")
+
+# ====================== АВТОРАССЫЛКА ПЕРВЫЕ 5 ДНЕЙ ======================
+scheduler = BackgroundScheduler(timezone="Europe/Moscow")
+scheduler.start()
+
+def send_daily_forecasts():
+    now = datetime.now()
+    for user_id, data in users.items():
+        if not data.get("paid"):
+            continue
+            
+        # Считаем, сколько дней прошло с первой оплаты
+        try:
+            first_payment_date = datetime.fromisoformat(data["expires"]).date() - timedelta(
+                days=int(data.get("days_paid", 365))
+            )
+            days_since_payment = (now.date() - first_payment_date).days
+        except:
+            days_since_payment = 999  # если что-то сломалось — не шлём
+
+        # Шлём только первые 5 дней
+        if 0 <= days_since_payment <= 4:
+            try:
+                forecast = generate_forecast(data["name"], data["birth"])
+                bot.send_message(
+                    chat_id=int(user_id),
+                    text=f"Доброе утро, {data['name']}!\n\nТвой персональный прогноз на сегодня:\n\n{forecast}"
+                )
+            )
+            except Exception as e:
+                print(f"Не смог отправить {user_id}: {e}")
+
+# Запускаем каждый день в 8:00 по Москве
+scheduler.add_job(
+    send_daily_forecasts,
+    'cron',
+    hour=8,
+    minute=0,
+    id='daily_forecast_8am',
+    replace_existing=True
+)
+
+# Выключаем рассылку при перезапуске (на всякий случай)
+atexit.register(lambda: scheduler.shutdown())
 
 # ====================== ЗАПУСК ======================
 if __name__ == '__main__':
@@ -240,6 +299,7 @@ if __name__ == '__main__':
     time.sleep(3)
     print("АстраЛаб 3000 онлайн и готов зарабатывать!")
     bot.infinity_polling(none_stop=True)
+
 
 
 
