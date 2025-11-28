@@ -210,10 +210,39 @@ def send_daily_forecasts():
 scheduler.add_job(send_daily_forecasts, 'cron', hour=8, minute=0, id='daily_8am', replace_existing=True)
 atexit.register(lambda: scheduler.shutdown())
 
+# ====================== ВЕБХУКИ (убиваем 409 навсегда) ======================
+import logging
+logging.basicConfig(level=logging.INFO)
+
+WEBHOOK_URL = f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}.onrender.com/webhook"
+
+def set_webhook():
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={WEBHOOK_URL}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.json()["ok"]:
+            print(f"Webhook установлен: {WEBHOOK_URL}")
+        else:
+            print("Ошибка установки webhook:", r.text)
+    except:
+        print("Не удалось установить webhook")
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return ''
+    abort(403)
 # ====================== ЗАПУСК ======================
 if __name__ == '__main__':
+    # Убираем polling, включаем вебхуки
     threading.Thread(target=run_flask, daemon=True).start()
     time.sleep(3)
-    print("АстраЛаб 3000 запущен и готов к миллиону!")
-    bot.infinity_polling(none_stop=True)
-
+    set_webhook()                    # ← ставим вебхук один раз при старте
+    print("АстраЛаб 3000 работает на вебхуках — 409 больше никогда не будет!")
+    # Убираем bot.infinity_polling() полностью
+    # Бот теперь живёт за счёт Flask
+    while True:
+        time.sleep(60)
