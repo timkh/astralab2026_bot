@@ -13,13 +13,13 @@ USERS_FILE = 'users.json'
 
 # ====================== БАЗА ======================
 def load_users():
-    if os.path.exists(US_FILE):
-        with open(US_FILE, encoding='utf-8') as f:
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
 def save_users(data):
-    with open(US_FILE, 'w', encoding='utf-8') as f:
+    with open(USERS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 users = load_users()
@@ -119,3 +119,4 @@ atexit.register(lambda: scheduler.shutdown())
 # ====================== ЗАПУСК (polling) ======================
 print("АстраЛаб 3000 запущен на polling — 409 больше никогда не будет!")
 bot.infinity_polling(none_stop=True, interval=0)
+
