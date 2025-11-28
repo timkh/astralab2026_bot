@@ -3,18 +3,18 @@ from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButt
 import json
 import os
 from datetime import datetime, timedelta
-from flask import Flask
+from flask import Flask, request, abort
 import threading
 import time
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 
-# ====================== Flask (чтобы Render не ругался на порты) ======================
+# ====================== Flask ======================
 app = Flask(__name__)
 
-@app.route('/')
-def index():
+@app.route('/health')
+def health():
     return "АстраЛаб 3000 работает → @Astralab2026_bot", 200
 
 def run_flask():
@@ -40,16 +40,25 @@ def save_users(data):
 
 users = load_users()
 
-# ====================== Знак зодиака ======================
-def get_zodiac_sign(birth):
+# ====================== ЗНАК ЗОДИАКА ======================
+def get_zodiac_sign(birth_date: str) -> str:
     try:
-        d, m = map(int, birth.split('.')[:2])
-        return ("Козерог","Водолей","Рыбы","Овен","Телец","Близнецы",
-                "Рак","Лев","Дева","Весы","Скорпион","Стрелец")[
-            (d > (19,18,20,19,20,20,22,22,22,22,21,21)[m-1])
-        ]
+        d, m = map(int, birth_date.strip().split('.')[:2])
+        if (m == 3 and d >= 21) or (m == 4 and d <= 19): return "Овен"
+        elif (m == 4 and d >= 20) or (m == 5 and d <= 20): return "Телец"
+        elif (m == 5 and d >= 21) or (m == 6 and d <= 20): return "Близнецы"
+        elif (m == 6 and d >= 21) or (m == 7 and d <= 22): return "Рак"
+        elif (m == 7 and d >= 23) or (m == 8 and d <= 22): return "Лев"
+        elif (m == 8 and d >= 23) or (m == 9 and d <= 22): return "Дева"
+        elif (m == 9 and d >= 23) or (m == 10 and d <= 22): return "Весы"
+        elif (m == 10 and d >= 23) or (m == 11 and d <= 21): return "Скорпион"
+        elif (m == 11 and d >= 22) or (m == 12 and d <= 21): return "Стрелец"
+        elif (m == 12 and d >= 22) or (m == 1 and d <= 19): return "Козерог"
+        elif (m == 1 and d >= 20) or (m == 2 and d <= 18): return "Водолей"
+        elif (m == 2 and d >= 19) or (m == 3 and d <= 20): return "Рыбы"
     except:
-        return "неизвестен"
+        pass
+    return "неизвестен"
 
 # ====================== Самый убойный промпт 2025 ======================
 AI_PROMPT = """
@@ -62,12 +71,12 @@ AI_PROMPT = """
 
 Строго соблюдай:
 - 4–6 раз обратись по имени, 3–5 раз упомяни знак зодиака
-- Стиль тёплый, личный, с лёгким шоком («{name}, я ахнула…», «как настоящий {zodiac}, ты…»)
-- Одна «страшно точная» деталь из прошлого именно для этого знака
+- Стиль тёплый, личный, с лёгким шоком («{name}», «как настоящий {zodiac}, ты…»)
+- Одна «страшно точная» деталь из прошлого именно для этого знака {zodiac}а
 - Конкретное событие на ближайшие 1–3 дня (точные даты + сфера + сумма или инициалы)
 - Простой мощный ритуал под знак
 - Фраза «Вселенная уже запустила этот сценарий» или «Энергия бьёт через край»
-- В конце всегда: «Хочешь усилить поток в 10 раз — напиши /усилить»
+- В конце всегда: «Хочешь усилить поток — напиши /усилить»
 
 Только русский, 200–320 слов, живой текст без списков.
 """
@@ -102,7 +111,7 @@ def generate_forecast(name, birth):
 30-го жди важный контакт (буквы «А», «С» или «Д»).
 Ритуал: монета + красная нить под подушкой на ночь.
 Вселенная уже запустила сценарий, {name}.
-Хочешь усилить в 10 раз — /усилить"""
+Хочешь усилить — /усилить"""
 
 # ====================== Команды бота ======================
 @bot.message_handler(commands=['start'])
@@ -190,8 +199,7 @@ if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
     time.sleep(3)
     
-    # Принудительно убиваем любой старый вебхук
-    requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true")
     
     print("АстраЛаб 3000 запущен — порт открыт, 409 убит, всё работает!")
     bot.infinity_polling(none_stop=True, interval=0)
+
