@@ -3,7 +3,7 @@ from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButt
 import json
 import os
 from datetime import datetime, timedelta
-from flask import Flask
+from flask import Flask, request, abort
 import threading
 import time
 import requests
@@ -11,6 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 
 # ====================== FLASK ДЛЯ RENDER ======================
+
 app = Flask(__name__)
 @app.route('/health')
 def health():
@@ -152,24 +153,28 @@ def subscribe(message):
     )
     bot.reply_to(message, "Выбери подписку и открой поток удачи:", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith('sub'))
-def invoice(callback):
-    days = 7 if callback.data == "sub7" else 30 if callback.data == "sub30" else 365
+# Правильный обработчик кнопок подписки
+@bot.callback_query_handler(func=lambda call: call.data in ["sub7", "sub30", "sub365"])
+def handle_subscription_callback(call):
+    days = 7 if call.data == "sub7" else 30 if call.data == "sub30" else 365
     stars = 549 if days == 7 else 1649 if days == 30 else 5499
+
     bot.send_invoice(
-        chat_id=callback.message.chat.id,
-        title=f"АстраЛаб — {days} дней",
-        description="Ежедневные ИИ-прогнозы + ритуалы",
+        chat_id=call.message.chat.id,
+        title=f"АстраЛаб — подписка {days} дней",
+        description="Ежедневные ИИ-прогнозы + ритуалы на деньги и любовь",
         payload=f"sub_{days}d",
         provider_token="",
         currency="XTR",
         prices=[LabeledPrice(f"{days} дней", stars)],
         start_parameter="astralab2026"
     )
+    bot.answer_callback_query(call.id)
 
-@bot.pre_checkout_query_handler(func=lambda q: True)
-def precheckout(q):
-    bot.answer_pre_checkout_query(q.id, ok=True)
+# Правильный обработчик pre-checkout
+@bot.pre_checkout_query_handler(func=lambda query: True)
+def process_pre_checkout_query(pre_checkout_query):
+    bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
 
 @bot.message_handler(content_types=['successful_payment'])
 def paid(message):
@@ -210,22 +215,16 @@ def send_daily_forecasts():
 scheduler.add_job(send_daily_forecasts, 'cron', hour=8, minute=0, id='daily_8am', replace_existing=True)
 atexit.register(lambda: scheduler.shutdown())
 
-# ====================== ВЕБХУКИ (убиваем 409 навсегда) ======================
-import logging
-logging.basicConfig(level=logging.INFO)
-
+# ====================== ВЕБХУКИ — 409 УБИТ НАВСЕГДА ======================
 WEBHOOK_URL = f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}.onrender.com/webhook"
 
 def set_webhook():
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={WEBHOOK_URL}"
     try:
         r = requests.get(url, timeout=10)
-        if r.json()["ok"]:
-            print(f"Webhook установлен: {WEBHOOK_URL}")
-        else:
-            print("Ошибка установки webhook:", r.text)
-    except:
-        print("Не удалось установить webhook")
+        print("Webhook статус:", r.json())
+    except Exception as e:
+        print("Webhook ошибка:", e)
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -233,16 +232,14 @@ def webhook():
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
-        return ''
-    abort(403)
+        return 'OK', 200
+    return abort(403)
+
 # ====================== ЗАПУСК ======================
 if __name__ == '__main__':
-    # Убираем polling, включаем вебхуки
     threading.Thread(target=run_flask, daemon=True).start()
-    time.sleep(3)
-    set_webhook()                    # ← ставим вебхук один раз при старте
-    print("АстраЛаб 3000 работает на вебхуках — 409 больше никогда не будет!")
-    # Убираем bot.infinity_polling() полностью
-    # Бот теперь живёт за счёт Flask
+    time.sleep(4)
+    set_webhook()
+    print("АстраЛаб 3000 на вебхуках — команды работают мгновенно!")
     while True:
-        time.sleep(60)
+        time.sleep(100)
