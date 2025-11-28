@@ -139,7 +139,7 @@ def subscribe(message):
         InlineKeyboardButton("30 дней – 1649", callback_data="sub30"),
         InlineKeyboardButton("Год – 5499", callback_data="sub365")
     )
-    bot.reply_to(message, "Выбери подписку и открой поток удачи:", reply_markup=markup)
+    bot.reply_to(message, "Выбери подписку и открой поток удачи прямо сейчас:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith('sub'))
 def invoice(callback):
@@ -180,6 +180,7 @@ if __name__ == '__main__':
     time.sleep(3)
     print("АстраЛаб 3000 онлайн и готов зарабатывать!")
     bot.infinity_polling(none_stop=True)
+
 
 
 
