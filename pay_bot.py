@@ -21,7 +21,7 @@ def run_flask():
 
 # Токен и ключ берём из переменных окружения Render
 BOT_TOKEN = os.environ['BOT_TOKEN']
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')  # можно оставить пустым — будет шаблон
+GROQ_API_KEY = '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'  # можно оставить пустым — будет шаблон
 
 bot = telebot.TeleBot(BOT_TOKEN)
 USERS_FILE = 'users.json'
@@ -180,4 +180,5 @@ if __name__ == '__main__':
     time.sleep(3)
     print("АстраЛаб 3000 онлайн и готов зарабатывать!")
     bot.infinity_polling(none_stop=True)
+
 
