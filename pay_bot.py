@@ -103,9 +103,15 @@ def start(message):
         "Напиши в двух строках:\nТвоё имя\nДату рождения (ДД.ММ.ГГГГ)\n\n"
         "Пример:\nАнна\n14.03.1997\n\nПервый прогноз — абсолютно бесплатно!")
 
-@bot.message_handler(func=lambda m: True)
+# 1. Обрабатываем только обычный текст (имя + дата)
+@bot.message_handler(content_types=['text'])
 def handle_text(message):
     user_id = str(message.from_user.id)
+    
+    # Если это команда — пропускаем (их обрабатывают другие хендлеры)
+    if message.text.startswith('/'):
+        return
+        
     lines = message.text.strip().split('\n')
     if len(lines) < 2:
         bot.reply_to(message, "Напиши имя и дату рождения в двух строках")
@@ -120,7 +126,7 @@ def handle_text(message):
         users[user_id] = {"name": name, "birth": birth, "paid": False}
         save_users(users)
 
-    bot.reply_to(message, forecast + "\n\nХочешь ежедневные прогнозы + ритуалы без лимита?\n/subscribe")
+    bot.reply_to(message, forecast + "\n\nХочешь ежедневные прогнозы без лимита?\n/subscribe")
 
 @bot.message_handler(commands=['forecast'])
 def forecast_cmd(message):
@@ -180,6 +186,7 @@ if __name__ == '__main__':
     time.sleep(3)
     print("АстраЛаб 3000 онлайн и готов зарабатывать!")
     bot.infinity_polling(none_stop=True)
+
 
 
 
