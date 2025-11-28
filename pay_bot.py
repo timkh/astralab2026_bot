@@ -3,27 +3,41 @@ from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButt
 import json
 import os
 from datetime import datetime, timedelta
-import requests  # Для API ИИ, если нужно
+from flask import Flask
+import threading
+import time
 
-BOT_TOKEN = '8304180212:AAHvov9U2_Lt6XCilX8LHzyzVkPxkrTmQGU'  # Вставь токен от BotFather
+# Flask app для Render (фейковый сервер на порту 10000)
+app = Flask(__name__)
+
+@app.route('/health', methods=['GET'])
+def health():
+    return 'OK', 200
+
+# Запуск Flask в фоне
+def run_flask():
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# BOT_TOKEN из переменных Render
+BOT_TOKEN = os.environ['8304180212:AAHvov9U2_Lt6XCilX8LHzyzVkPxkrTmQGU']
 USERS_FILE = 'users.json'
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Загрузка/сохранение пользователей (кто заплатил)
 def load_users():
     if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, 'r') as f:
+        with open(USERS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
 def save_users(users):
-    with open(USERS_FILE, 'w') as f:
-        json.dump(users, f)
+    with open(USERS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
 
 users = load_users()
 
-# Промпт для ИИ (вставь тот, что я дал раньше)
+# Вставь СЮДА полный промпт для ИИ (тот длинный текст, который я давал раньше — от "Ты — сверхточная..." до конца)
 AI_PROMPT = """
 Ты — сверхточная нейросеть-астролог «АстраЛаб-3000», обученная на миллионах натальных карт, древних ведических текстах и квантовой нумерологии 2025 года.
 
@@ -47,129 +61,98 @@ AI_PROMPT = """
 Сделай максимально личный и «страшно точный» прогноз на сегодня + ближайшие 3 дня.
 """
 
-# Функция генерации прогноза (используем бесплатный API, например, Grok или OpenAI mini — вставь свой ключ, если есть; иначе шаблон)
 def generate_forecast(name, birth):
     today = datetime.now().strftime("%d %B %Y")
     prompt = AI_PROMPT.format(name=name, birth=birth, today=today)
-    
-    # Здесь вызов API (пример с requests к бесплатному эндпоинту; замени на свой Grok API если есть ключ)
-    # Для теста используем простой шаблон, потом подключишь реальный ИИ
-    # response = requests.post('https://api.groq.com/openai/v1/chat/completions', json={'model': 'llama3-8b-8192', 'messages': [{'role': 'system', 'content': prompt}]}, headers={'Authorization': 'Bearer ТВОЙ_GROQ_KEY'})
-    # return response.json()['choices'][0]['message']['content']
-    
-    # Временный шаблон для теста (потом заменишь на реальный API)
-    return f"{name}, я прям вздрогнула, когда посмотрела твою карту сегодня… Вижу, что в прошлом году ты пережила перемены в работе, которые сделали тебя сильнее. С завтрашнего дня идёт коридор удачи в деньгах — жди сумму от 50к. Ритуал: положи монетку в кошелёк с шепотом 'приходи'. Энергия на твоей стороне! Хочешь усилить — /усилить"
+    # Пока шаблон — потом подключишь реальный API (Grok/Claude)
+    return f"""{name}, я прям вздрогнула, когда посмотрела твою карту сегодня…  
+Вижу, что в прошлом году ты пережила перемены, которые сделали тебя сильнее (это видно по твоей энергии).  
+С завтрашнего дня (29 ноября) по 1 декабря идёт мощный коридор удачи в деньгах — жди сумму от 70 тысяч (премия или возврат).  
+В любви: 30 ноября сообщение от человека на «А» или «Д».  
+Ритуал: возьми красную нитку, завяжи 7 узелков с суммой денег и положи под подушку.  
+Энергия именно сейчас на твоей стороне — Вселенная уже запустила сценарий.  
+Хочешь усилить поток в 10 раз — напиши /усилить"""
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    user_id = message.from_user.id
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Получить бесплатный прогноз", callback_data="free_forecast"))
-    bot.reply_to(message, "Привет! Я — АстраЛаб 3000, ИИ-астролог ✨\nВведи имя и дату рождения (ДД.ММ.ГГГГ):\nПример: Анна 14.03.1997", reply_markup=markup)
+    bot.reply_to(message, "✨ Привет! Я — АстраЛаб 3000, ИИ-астролог нового поколения.\n\nНапиши в одном сообщении:\nТвоё имя\nДату рождения (ДД.ММ.ГГГГ)\n\nПример:\nАнна\n14.03.1997\n\nПервый прогноз — бесплатно!")
 
-@bot.callback_query_handler(func=lambda call: call.data == "free_forecast")
-def free_forecast(call):
-    bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, "Введи данные для прогноза!")
-
-@bot.message_handler(func=lambda message: True)
-def handle_input(message):
-    user_id = message.from_user.id
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
+    user_id = str(message.from_user.id)
     text = message.text.strip()
-    if '\n' in text:
-        lines = text.split('\n')
-        name = lines[0].strip()
-        birth = lines[1].strip() if len(lines) > 1 else ''
-    else:
-        name, birth = text.split(' ', 1) if ' ' in text else (text, '')
-    
-    if not birth:
-        bot.reply_to(message, "Уточни дату: ДД.ММ.ГГГГ")
+    lines = text.split('\n')
+    if len(lines) < 2:
+        bot.reply_to(message, "Напиши имя и дату рождения в двух строках")
         return
-    
-    # Первый прогноз бесплатно
+    name = lines[0].strip()
+    birth = lines[1].strip()
+
     forecast = generate_forecast(name, birth)
-    users[user_id] = {'name': name, 'birth': birth, 'paid': False, 'expires': None}
-    save_users(users)
-    bot.reply_to(message, forecast)
+    
+    if user_id not in users:
+        users[user_id] = {"name": name, "birth": birth, "paid": False}
+        save_users(users)
+    
+    bot.reply_to(message, forecast + "\n\n🔮 Хочешь ежедневные прогнозы + ритуалы без лимита?\nНажми /subscribe")
 
 @bot.message_handler(commands=['forecast'])
 def forecast(message):
-    user_id = message.from_user.id
-    if user_id not in users:
-        bot.reply_to(message, "Сначала /start!")
+    user_id = str(message.from_user.id)
+    if user_id not in users or not users[user_id].get("paid"):
+        bot.reply_to(message, "Доступ закрыт. Купи подписку → /subscribe")
         return
-    
-    user = users[user_id]
-    if user['paid'] and (not user['expires'] or datetime.now() < user['expires']):
-        forecast_text = generate_forecast(user['name'], user['birth'])
-        bot.reply_to(message, forecast_text)
-    else:
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("Купить подписку", callback_data="subscribe"))
-        bot.reply_to(message, "Доступ заблокирован. Купи подписку для полных прогнозов!", reply_markup=markup)
+    name = users[user_id]["name"]
+    birth = users[user_id]["birth"]
+    bot.reply_to(message, generate_forecast(name, birth))
 
 @bot.message_handler(commands=['subscribe'])
 def subscribe(message):
-    user_id = message.from_user.id
-    markup = InlineKeyboardMarkup()
-    markup.row(
-        InlineKeyboardButton("7 дней - 549 Stars", callback_data="sub7"),
-        InlineKeyboardButton("30 дней - 1649 Stars", callback_data="sub30")
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        InlineKeyboardButton("7 дней – 549 ⭐", callback_data="sub7"),
+        InlineKeyboardButton("30 дней – 1649 ⭐", callback_data="sub30"),
+        InlineKeyboardButton("Год – 5499 ⭐", callback_data="sub365")
     )
-    markup.add(InlineKeyboardButton("Год - 5499 Stars", callback_data="sub365"))
     bot.reply_to(message, "Выбери подписку:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('sub'))
-def send_invoice(call):
-    bot.answer_callback_query(call.id)
-    chat_id = call.message.chat.id
-    if call.data == 'sub7':
-        prices = [LabeledPrice('7 дней', 549)]
-        payload = 'week_sub'
-        expires = datetime.now() + timedelta(days=7)
-    elif call.data == 'sub30':
-        prices = [LabeledPrice('30 дней', 1649)]
-        payload = 'month_sub'
-        expires = datetime.now() + timedelta(days=30)
-    else:
-        prices = [LabeledPrice('365 дней', 5499)]
-        payload = 'year_sub'
-        expires = datetime.now() + timedelta(days=365)
+def handle_sub(call):
+    days = 7 if call.data == "sub7" else 30 if call.data == "sub30" else 365
+    stars = 549 if days == 7 else 1649 if days == 30 else 5499
+    payload = f"sub_{days}d"
     
     bot.send_invoice(
-        chat_id=chat_id,
-        title='АстраЛаб Подписка',
-        description='Ежедневные ИИ-прогнозы + ритуалы',
+        chat_id=call.message.chat.id,
+        title=f"Подписка АстраЛаб — {days} дней",
+        description="Ежедневные персональные прогнозы + ритуалы",
         payload=payload,
-        provider_token='',  # Пусто для Stars!
-        currency='XTR',  # Код для Stars
-        prices=prices,
-        start_parameter='stars-test'
+        provider_token="",  # Пусто для Stars
+        currency="XTR",    # Валюта Stars
+        prices=[LabeledPrice(label=f"{days} дней", amount=stars)],
+        start_parameter="astralab"
     )
 
-@bot.pre_checkout_query_handler(func=lambda query: True)
-def pre_checkout_query(pre_checkout_q):
-    bot.answer_pre_checkout_query(pre_checkout_q.id, ok=True)
+@bot.pre_checkout_query_handler(func=lambda q: True)
+def precheckout(q):
+    bot.answer_pre_checkout_query(q.id, ok=True)
 
 @bot.message_handler(content_types=['successful_payment'])
-def successful_payment(message):
-    user_id = message.from_user.id
-    payload = message.successful_payment.invoice_payload
-    if payload == 'week_sub':
-        expires = datetime.now() + timedelta(days=7)
-    elif payload == 'month_sub':
-        expires = datetime.now() + timedelta(days=30)
-    else:
-        expires = datetime.now() + timedelta(days=365)
-    
-    users[user_id]['paid'] = True
-    users[user_id]['expires'] = expires
+def paid(message):
+    user_id = str(message.from_user.id)
+    days = 7 if "7d" in message.successful_payment.invoice_payload else 30 if "30d" in message.successful_payment.invoice_payload else 365
+    expires = datetime.now() + timedelta(days=days)
+    users[user_id]["paid"] = True
+    users[user_id]["expires"] = expires.isoformat()
     save_users(users)
-    
-    bot.reply_to(message, f"Спасибо! Подписка активирована до {expires.strftime('%d.%m.%Y')}. Теперь /forecast работает без лимитов! ✨")
+    bot.reply_to(message, f"Оплата прошла! Подписка активна до {expires.strftime('%d.%m.%Y')}.\nТеперь каждый день пиши /forecast ✨")
 
-# Запуск
+# Запуск: Flask в фоне + бот polling
 if __name__ == '__main__':
-    print("Бот запущен!")
-    bot.polling(none_stop=True)
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    print("Flask запущен на порту 10000")
+    time.sleep(5)  # Ждём, пока Flask стартанёт
+    print("АстраЛаб 3000 запущен!")
+    bot.infinity_polling()
