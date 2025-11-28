@@ -1,41 +1,38 @@
 import telebot
-from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton, Update
-import json, os, threading, time, requests
+from telebot.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
+import json, os, time, requests
 from datetime import datetime, timedelta
-from flask import Flask, request, abort
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 
-app = Flask(__name__)
-@app.route('/health')
-def health(): return 'OK', 200
-
-def run_flask():
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-
+# ====================== КОНФИГ ======================
 BOT_TOKEN = os.environ['BOT_TOKEN']
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 bot = telebot.TeleBot(BOT_TOKEN)
 USERS_FILE = 'users.json'
 
+# ====================== БАЗА ======================
 def load_users():
-    return json.load(open(USERS_FILE, encoding='utf-8')) if os.path.exists(USERS_FILE) else {}
+    if os.path.exists(US_FILE):
+        with open(US_FILE, encoding='utf-8') as f:
+            return json.load(f)
+    return {}
 
 def save_users(data):
-    with open(USERS_FILE, 'w', encoding='utf-8') as f:
+    with open(US_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 users = load_users()
 
-def get_zodiac_sign(birth):
+# ====================== ЗНАК ЗОДИАКА + ПРОГНОЗ ======================
+def get_zodiac_sign(b):
     try:
-        d, m = map(int, birth.split('.')[:2])
-        return ["Козерог","Водолей","Рыбы","Овен","Телец","Близнецы","Рак","Лев","Дева","Весы","Скорпион","Стрелец"][
+        d,m = map(int, b.split('.')[:2])
+        return ("Козерог","Водолей","Рыбы","Овен","Телец","Близнецы","Рак","Лев","Дева","Весы","Скорпион","Стрелец")[
             (m-1)*2 + (d > (19,18,20,19,20,20,22,22,22,22,21,21)[m-1])]
     except: return "неизвестен"
 
-AI_PROMPT = """Ты — сверхточная нейросеть-астролог «АстраЛаб-3000»... (тот же убойный промпт, что я давал выше)"""
+AI_PROMPT = """Ты — сверхточная нейросеть-астролог «АстраЛаб-3000»... (тот же убойный промпт, что был раньше)"""
 
 def generate_forecast(name, birth):
     today = datetime.now().strftime("%d %B %Y")
@@ -48,11 +45,13 @@ def generate_forecast(name, birth):
                 headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                 json={"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":prompt}],
                       "temperature":0.87,"max_tokens":700}, timeout=18)
-            if r.status_code == 200: return r.json()['choices'][0]['message']['content'].strip()
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content'].strip()
         except: pass
-    return f"{name}, {zodiac}, я ахнула… Вселенная уже запустила денежный поток 29–30 ноября (80–350к). Ритуал: монета + красная нить. Хочешь усилить в 10 раз — /усилить"
 
-# КОМАНДЫ
+    return f"{name}, {zodiac}, я ахнула… Вселенная уже запустила денежный поток 29–30 ноября (80–350к). Ритуал: монета + красная нить. Хочешь усилить — /усилить"
+
+# ====================== КОМАНДЫ ======================
 @bot.message_handler(commands=['start'])
 def start(m): bot.reply_to(m, "Привет! Я — АстраЛаб 3000\n\nНапиши:\nИмя\nДД.ММ.ГГГГ")
 
@@ -76,19 +75,20 @@ def forecast(m):
 @bot.message_handler(commands=['subscribe'])
 def subscribe(m):
     kb = InlineKeyboardMarkup(row_width=1)
-    kb.add(InlineKeyboardButton("7 дней — 549", callback_data="sub7"),
-           InlineKeyboardButton("30 дней — 1649", callback_data="sub30"),
-           InlineKeyboardButton("Год — 5499", callback_data="sub365"))
-    bot.reply_to(m, "Выбери подписку и открой поток удачи:", reply_markup=kb)
+    kb.add(
+        InlineKeyboardButton("7 дней — 549", callback_data="sub7"),
+        InlineKeyboardButton("30 дней — 1649", callback_data="sub30"),
+        InlineKeyboardButton("Год — 5499", callback_data="sub365")
+    )
+    bot.reply_to(m, "Выбери подписку:", reply_markup=kb)
 
 @bot.callback_query_handler(func=lambda c: c.data in ["sub7","sub30","sub365"])
 def pay(c):
     days = 7 if c.data=="sub7" else 30 if c.data=="sub30" else 365
     stars = 549 if days==7 else 1649 if days==30 else 5499
     bot.send_invoice(c.message.chat.id, title=f"АстраЛаб — {days} дней",
-        description="Ежедневные ИИ-прогнозы + ритуалы", payload=f"sub_{days}d",
-        provider_token="", currency="XTR", prices=[LabeledPrice(f"{days} дней", stars)], start_parameter="astralab2026")
-    bot.answer_callback_query(c.id)
+        description="Прогнозы каждый день", payload=f"sub_{days}d",
+        provider_token="", currency="XTR", prices=[LabeledPrice(f"{days} дней", stars)])
 
 @bot.pre_checkout_query_handler(func=lambda q: True)
 def pre(q): bot.answer_pre_checkout_query(q.id, ok=True)
@@ -102,9 +102,9 @@ def paid(m):
         users[uid]["first_payment_date"] = datetime.now().isoformat()
     users[uid].update({"paid":True, "expires":expires.isoformat(), "days_paid":days})
     save_users(users)
-    bot.reply_to(m, f"Оплата прошла! Подписка до {expires.strftime('%d.%m.%Y')}.\nПервые 5 дней — прогноз в 8:00 автоматически!")
+    bot.reply_to(m, f"Оплата прошла! Подписка до {expires.strftime('%d.%m.%Y')}.\nПервые 5 дней — прогноз в 8:00")
 
-# РАССЫЛКА
+# ====================== РАССЫЛКА ======================
 scheduler = BackgroundScheduler(timezone="Europe/Moscow")
 scheduler.start()
 def daily():
@@ -116,25 +116,6 @@ def daily():
 scheduler.add_job(daily, 'cron', hour=8, minute=0, replace_existing=True)
 atexit.register(lambda: scheduler.shutdown())
 
-# ВЕБХУКИ
-WEBHOOK_HOST = os.environ['RENDER_EXTERNAL_HOSTNAME']
-WEBHOOK_URL = f"https://{WEBHOOK_HOST}.onrender.com/webhook"
-
-def set_webhook():
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={WEBHOOK_URL}&drop_pending_updates=true"
-    print("Webhook:", requests.get(url, timeout=15).json())
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        update = Update.de_json(request.get_data().decode('utf-8'))
-        bot.process_new_updates([update])
-        return 'OK', 200
-    return abort(403)
-
-if __name__ == '__main__':
-    threading.Thread(target=run_flask, daemon=True).start()
-    time.sleep(5)
-    set_webhook()
-    print(f"АстраЛаб 3000 ЖИВ на {WEBHOOK_URL}")
-    while True: time.sleep(3600)
+# ====================== ЗАПУСК (polling) ======================
+print("АстраЛаб 3000 запущен на polling — 409 больше никогда не будет!")
+bot.infinity_polling(none_stop=True, interval=0)
